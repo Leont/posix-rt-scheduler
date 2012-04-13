@@ -2,5 +2,5 @@ use strict;
 use warnings;
 use POSIX::RT::Scheduler 'sched_setscheduler';
 
-sched_setscheduler($$, 'idle') or warn "Couldn't make self idle-scheduled: $!";
+sched_setscheduler($$, 'idle') or warn "Couldn't make self idle-scheduled: $!\n";
 exec @ARGV;

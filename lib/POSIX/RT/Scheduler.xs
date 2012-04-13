@@ -40,20 +40,39 @@ static void S_die_sys(pTHX_ const char* format) {
 #define identifiers_key "POSIX::RT::Scheduler::identifiers"
 #define names_key "POSIX::RT::Scheduler::names"
 
-static int get_policy(pTHX_ SV* name) {
+static int S_get_policy(pTHX_ SV* name) {
 	HV* policies = (HV*)*hv_fetchs(PL_modglobal, names_key, 0);
 	HE* ret = hv_fetch_ent(policies, name, 0, 0);
 	if (ret == NULL)
 		Perl_croak(aTHX_ "");
 	return SvIV(HeVAL(ret));
 }
-static SV* get_name(pTHX_ int policy) {
+#define get_policy(name) S_get_policy(aTHX_ name)
+static SV* S_get_name(pTHX_ int policy) {
 	AV* names = (AV*)*hv_fetchs(PL_modglobal, names_key, 0);
 	SV** ret = av_fetch(names, policy, 0);
 	if (ret == NULL || *ret == NULL)
 		Perl_croak(aTHX_ "");
 	return *ret;
 }
+#define get_name(policy) S_get_name(aTHX_ policy)
+
+#ifdef USE_ITHREADS
+static pthread_t* S_get_pthread(pTHX_ SV* thread_handle) {
+	SV* tmp;
+	pthread_t* ret;
+	dSP;
+	PUSHMARK(SP);
+	PUSHs(thread_handle);
+	PUTBACK;
+	call_method("_handle", G_SCALAR);
+	SPAGAIN;
+	tmp = POPs;
+	ret = INT2PTR(pthread_t* ,SvUV(tmp));
+	return ret;
+}
+#define get_pthread(handle) S_get_pthread(aTHX_ handle)
+#endif
 
 MODULE = POSIX::RT::Scheduler				PACKAGE = POSIX::RT::Scheduler
 
@@ -81,30 +100,38 @@ BOOT:
 
 SV*
 sched_getscheduler(pid)
-	int pid;
+	SV* pid;
 	PREINIT:
 		int ret;
 		HV* scheds;
 	CODE:
-	ret = sched_getscheduler(pid);
-	if (ret == -1) 
-		die_sys("Couldn't get scheduler: %s");
+		ret = sched_getscheduler(SvIV(pid));
+		if (ret == -1) 
+			die_sys("Couldn't get scheduler: %s");
 	RETVAL = get_name(ret);
 	OUTPUT:
 		RETVAL
 
 SV*
 sched_setscheduler(pid, policy, arg = 0)
-	int pid;
+	SV* pid;
 	SV* policy;
 	int arg;
 	PREINIT:
 		int ret, real_policy;
 		struct sched_param param;
 	CODE:
-	real_policy = get_policy(policy);
-	param.sched_priority = arg;
-	ret = sched_setscheduler(pid, real_policy, &param);
+		real_policy = get_policy(policy);
+		param.sched_priority = arg;
+#ifdef USE_ITHREADS
+		if (SvOK(pid) && SvROK(pid) && sv_derived_from(pid, "threads"))
+			ret = pthread_setschedparam(*get_pthread(pid), real_policy, &param);
+		else
+#endif
+			ret = sched_setscheduler(SvIV(pid), real_policy, &param);
+		if (ret == -1)
+			die_sys("Could not set scheduler: %s");
+	else if (SvROK(pid))
 	if (ret == -1) 
 		die_sys("Couldn't set scheduler: %s");
 	RETVAL = 
@@ -121,21 +148,30 @@ sched_getpriority(pid)
 	PREINIT:
 		struct sched_param param;
 	CODE:
-		sched_getparam(pid, &param);
-		RETVAL = param.sched_priority;
+		{
+			sched_getparam(pid, &param);
+			RETVAL = param.sched_priority;
+		}
 	OUTPUT:
 		RETVAL
 
 void
 sched_setpriority(pid, priority)
-	int pid;
+	SV* pid;
 	int priority;
 	PREINIT:
 		int ret;
 		struct sched_param param;
 	CODE:
 		param.sched_priority = priority;
-		ret = sched_getparam(pid, &param);
+		if (!SvOK(pid))
+			Perl_croak(aTHX_ "pid is undefined");
+#ifdef USE_ITHREADS
+		if (SvROK(pid) && sv_derived_from(pid, "threads"))
+			ret = pthread_setschedprio(*get_pthread(pid), priority);
+		else
+#endif
+			ret = sched_setparam(SvIV(pid), &param);
 		if (ret == -1) 
 			die_sys("Couldn't set scheduler priority: %s");
 
