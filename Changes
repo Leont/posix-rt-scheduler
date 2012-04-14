@@ -1,6 +1,7 @@
 Revision history for POSIX-RT-Scheduler
 
 {{$NEXT}}
+          Add Devel::CheckLib to configure requirements
 
 0.001     2012-04-14 00:05:35 Europe/Amsterdam
           Initial version
