@@ -57,7 +57,8 @@ static SV* S_get_name(pTHX_ int policy) {
 }
 #define get_name(policy) S_get_name(aTHX_ policy)
 
-#ifdef USE_ITHREADS
+#if defined(USE_ITHREADS) && defined(_POSIX_THREAD_PRIORITY_SCHEDULING) && _POSIX_THREAD_PRIORITY_SCHEDULING >= 0
+#define THREAD_SCHED
 static pthread_t* S_get_pthread(pTHX_ SV* thread_handle) {
 	SV* tmp;
 	pthread_t* ret;
@@ -123,7 +124,7 @@ sched_setscheduler(pid, policy, arg = 0)
 	CODE:
 		real_policy = get_policy(policy);
 		param.sched_priority = arg;
-#ifdef USE_ITHREADS
+#ifdef THREAD_SCHED
 		if (SvOK(pid) && SvROK(pid) && sv_derived_from(pid, "threads"))
 			ret = pthread_setschedparam(*get_pthread(pid), real_policy, &param);
 		else
@@ -166,7 +167,7 @@ sched_setpriority(pid, priority)
 		param.sched_priority = priority;
 		if (!SvOK(pid))
 			Perl_croak(aTHX_ "pid is undefined");
-#ifdef USE_ITHREADS
+#ifdef THREAD_SCHED
 		if (SvROK(pid) && sv_derived_from(pid, "threads"))
 			ret = pthread_setschedprio(*get_pthread(pid), priority);
 		else

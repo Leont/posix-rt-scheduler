@@ -1,6 +1,7 @@
 Revision history for POSIX-RT-Scheduler
 
 {{$NEXT}}
+          Only do thread scheduling when it's available
 
 0.002     2012-04-14 11:09:14 Europe/Amsterdam
           Add Devel::CheckLib to configure requirements
